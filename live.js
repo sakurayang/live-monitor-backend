@@ -1,7 +1,8 @@
 const request = require("request-promise-native");
 const ws = require('ws');
 const fs = require('fs');
-const zlib = require('zlib');
+const db = require('./db');
+
 class Room {
     /**
      * @param {Number} id
@@ -10,14 +11,47 @@ class Room {
     constructor(id) {
         if (isNaN(id)) return new Error("error ID");
         this.id = id;
-
+        this.init();
         return this;
     }
     async init() {
-        this.danmu = await this._setDanmuURL();
+        //this.danmu = await this._setDanmuURL();
         this.gift_conf = await this._setgiftConf();
-        this.room_info = await this.getRoomInfo();
+        await this.getRoomInfo();
+        //this.live_status = await this.isLiving();
+        await require('better-sqlite3')(__dirname + '/live.db').prepare(`CREATE TABLE IF NOT EXISTS "${this.id}" (count int not null,time int not null,views int not null,gift int,silver int,gold int)`).run();
+        let _count = await db.getCount(this.id) || 1;
+        let select = await db.SELECTALL(this.id, ['count >= 0'], 1, _count - 1);
+        console.log(select);
+        let dbcount = select.result.length == 0 ? 1 : select.result[0].count;
+        let dbtime = select.result.length == 0 ? this.room_info.room.start_time : select.result[0].time;
+        this.counter = this.live_status
+            ? this.room_info.room.start_time == dbtime
+                ? dbcount
+                : dbcount + 1
+            : dbcount;
+        //console.log(this);
+        this.monitorInterval = setInterval(async () => {
+            this.last_status = this.live_status || 0;
+            this.live_status = await this.isLiving();
+            if (this.last_status === 0 && this.live_status === 1) {
+                console.log('开播');
+                this.last_status = 1;
+                this.counter += 1;
+                this.connectSocket();
+            } else if (this.last_status === 1 && this.live_status === 0) {
+                this.last_status = 0;
+                console.log("下播");
+                clearInterval(this.socketInterval);
+                this.socket.close();
+            };
+        }, 1500);
         return this;
+    }
+    async isLiving() {
+        let info = await request.get(`https://api.live.bilibili.com/room/v1/Room/room_init?id=${this.id}`);
+        info = JSON.parse(info);
+        return info.data.live_status;
     }
     /**
      * @returns {
@@ -50,11 +84,10 @@ class Room {
     async getRoomInfo() {
         let info = await request.get(`https://api.live.bilibili.com/xlive/web-room/v1/index/getInfoByRoom?room_id=${this.id}`);
         info = JSON.parse(info);
-        if (info.code != 0) return { ok: false, error: info.message };
+        if (info.code != 0) return { code: 1, error: info.message };
         let data = info.data;
         let room_info = data.room_info;
-        if (!room_info.live_status) return { ok: false, error: "未开播" };
-
+        let live_status = room_info.live_status;
         let title = room_info.title;
         let cover = room_info.cover;
         let start_time = room_info.live_start_time;
@@ -75,15 +108,15 @@ class Room {
         let rank = rankdb_info.rank_desc;
 
         let area_rank = data.area_rank_info.areaRank.rank;
-
-        return {
-            ok: true,
+        this.room_info = {
+            code: 0,
             room: {
                 title,
                 cover,
                 start_time,
                 rank,
-                area_rank
+                area_rank,
+                live_status
             },
             area,
             anchor: {
@@ -91,6 +124,7 @@ class Room {
                 level
             }
         };
+        return this.room_info;
     }
 
     async getGiftList() {
@@ -212,6 +246,12 @@ class Room {
                 break;
             case 3:
                 console.log("人气：" + data.readInt32BE(16));
+
+                db.INSERT(this.id, {
+                    count: this.counter,
+                    time: this.room_info.room.start_time,
+                    views: data.readInt32BE(16)
+                });
                 break;
             case 2:
                 this.socket.send(this.packet('heart'));
@@ -226,13 +266,13 @@ class Room {
         }
     }
     async connectSocket() {
-        'danmu' in this ? true : this._setDanmuURL();
+        this.danmu = await this._setDanmuURL();
         this.socket = new ws(`wss://broadcastlv.chat.bilibili.com/sub`);
         this.socket.on('open', () => {
             this.socket.send(this.packet('hello'));
             this.socket.send(this.packet('heart'));
         });
-        setInterval(() => { this.socket.send(this.packet('heart')) }, 1000);
+        this.socketInterval = setInterval(() => { this.socket.send(this.packet('heart')) }, 5000);
         this.socket.on('ping', () => {
             this.socket.send(this.packet('heart'));
         });
