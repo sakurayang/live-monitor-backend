@@ -14,36 +14,38 @@ app.use(_.get('/', ctx => {
         msg: 'please input id'
     }
 }));
-
+async function getRoomData(id, init = false) {
+    let offset;
+    try {
+        offset = await db.getCount(id) - 1;
+    } catch (error) {
+        return {
+            code: 1,
+            msg: String(error)
+        };
+    }
+    let counter = (await db.SELECTALL(id, [`count >= 0`], 1, offset - 1)).result[0].count;
+    //console.log(count, counter);
+    let msg = "ok";
+    let result;
+    if (init) {
+        let init_data = await db.SELECTALL(id, { count: counter });
+        console.log(init_data);
+        msg = "init";
+        result = init_data.result
+    } else {
+        let data = (await db.SELECTALL(id, { count: counter })).result;
+        result = data[data.length - 1];
+    }
+    return {
+        code: 0,
+        msg, result
+    }
+}
 app.use(_.get('/:id', async (ctx, id) => {
     ctx.status = 200;
     ctx.header = { "Content-Type": "application/json" };
-    let count;
-    try {
-        count = await db.getCount(id);
-    } catch (error) {
-        ctx.body = {
-            code: 1,
-            msg: String(error)
-        }
-        return error;
-    }
-    let counter = (await db.SELECTALL(id, [`count >= 0`], 1, count - 1)).count;
-    if (ctx.query.init) {
-        let init_data = await db.SELECTALL(id, { count: counter });
-        console.log(init_data);
-        ctx.body = {
-            code: 0,
-            msg: "init",
-            result: init_data.result
-        }
-    }
-    let data = await db.SELECTALL(id, { count: counter }, 1, count - 1);
-    ctx.body = {
-        code: 0,
-        msg: "ok",
-        result: data.result
-    }
+    ctx.body = await getRoomData(id, /init=true/.test(ctx.req.url));
 }));
 
 app.use(_.get('/add/:id', async (ctx, id) => {

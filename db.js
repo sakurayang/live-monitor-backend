@@ -38,9 +38,10 @@ async function select(table, params) {
     }
 
 }
-async function getCount(table) {
+async function getCount(table, where = {}) {
     try {
-        let count = await DB.prepare(`SELECT count(*) FROM "${table}"`).get()['count(*)'];
+        let count = await DB.prepare(`SELECT count(*) FROM "${table}"` +
+            `${Object.keys(where).length == 0 ? ' ' : 'WHERE ' + parseObject(where).string}`).get()['count(*)'];
         return count;
     } catch (error) {
         throw error;
@@ -56,8 +57,8 @@ async function selectAll(table, where, limit = 0, offset = 0) {
     let result = [];
     let count;
     try {
-        count = await DB.prepare(`SELECT count(*) FROM "${table}"`).get()['count(*)'];
-        limit = limit == 0 ? count : limit;
+        count = await DB.prepare(`SELECT count(*) FROM "${table}" WHERE ${parseObject(where).string}`).get()['count(*)'];
+        limit = limit ? limit : count;
     } catch (error) {
         throw error;
     }
@@ -65,12 +66,12 @@ async function selectAll(table, where, limit = 0, offset = 0) {
     //console.log(limit);
     for (let i = 0; i < Math.abs(limit - offset); i++) {
         if (i > count - offset - 1) break;
-        console.log(i, parseObject(where).string);
-        result.push(await DB.prepare(`SELECT * FROM "${table}" WHERE ${parseObject(where).string} LIMIT 1 OFFSET ${offset + i}`).get());
+        //console.log(i, parseObject(where).string);
+        let db_data = await DB.prepare(`SELECT * FROM "${table}" WHERE ${parseObject(where).string} LIMIT 1 OFFSET ${offset + i}`).get();
+        result.push(db_data);
     }
     return { count, result };
 }
-
 /**
  * 
  * @param {String} table 

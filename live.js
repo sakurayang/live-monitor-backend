@@ -15,38 +15,13 @@ class Room {
         return this;
     }
     async init() {
-        //this.danmu = await this._setDanmuURL();
-        this.gift_conf = await this._setgiftConf();
-        await this.getRoomInfo();
-        //this.live_status = await this.isLiving();
-        await require('better-sqlite3')(__dirname + '/live.db').prepare(`CREATE TABLE IF NOT EXISTS "${this.id}" (count int not null,time int not null,views int not null,gift int,silver int,gold int)`).run();
-        let _count = await db.getCount(this.id) || 1;
-        let select = await db.SELECTALL(this.id, ['count >= 0'], 1, _count - 1);
-        console.log(select);
-        let dbcount = select.result.length == 0 ? 1 : select.result[0].count;
-        let dbtime = select.result.length == 0 ? this.room_info.room.start_time : select.result[0].time;
-        this.counter = this.live_status
-            ? this.room_info.room.start_time == dbtime
-                ? dbcount
-                : dbcount + 1
-            : dbcount;
-        //console.log(this);
-        this.monitorInterval = setInterval(async () => {
-            this.last_status = this.live_status || 0;
-            this.live_status = await this.isLiving();
-            if (this.last_status === 0 && this.live_status === 1) {
-                console.log('开播');
-                this.last_status = 1;
-                this.counter += 1;
-                this.connectSocket();
-            } else if (this.last_status === 1 && this.live_status === 0) {
-                this.last_status = 0;
-                console.log("下播");
-                clearInterval(this.socketInterval);
-                this.socket.close();
-            };
-        }, 1500);
-        return this;
+        await this.updateInfo();
+        this.gift_conf = await this.getgiftConf();
+        await require('better-sqlite3')(__dirname + '/live.db')
+            .prepare(`CREATE TABLE IF NOT EXISTS "${this.id}" ` +
+                `(count int not null,time int not null,views int not null,gift int,silver int,gold int)`).run();
+        this.last_status = 0;
+        await this.setTimer();
     }
     async isLiving() {
         let info = await request.get(`https://api.live.bilibili.com/room/v1/Room/room_init?id=${this.id}`);
@@ -108,7 +83,7 @@ class Room {
         let rank = rankdb_info.rank_desc;
 
         let area_rank = data.area_rank_info.areaRank.rank;
-        this.room_info = {
+        let output = {
             code: 0,
             room: {
                 title,
@@ -124,7 +99,7 @@ class Room {
                 level
             }
         };
-        return this.room_info;
+        return output;
     }
 
     async getGiftList() {
@@ -134,7 +109,7 @@ class Room {
         return { list: list.data.list, sliver_list: list.data.sliver_list };
     }
 
-    async _setgiftConf() {
+    async getgiftConf() {
         let conf = await request.get(`https://api.live.bilibili.com/gift/v4/Live/giftConfig?roomid=${this.id}`);
         conf = JSON.parse(conf);
         if (conf.code != 0) return require("./gift.json");
@@ -157,7 +132,7 @@ class Room {
         token: String
     }}
      */
-    async _setDanmuURL() {
+    async getDanmuURL() {
         let info = await request.get(`https://api.live.bilibili.com/room/v1/Danmu/getConf?room_id=${this.id}`);
         info = JSON.parse(info);
         if (info.code != 0 && info.msg != "ok") return { ok: false, error: info.message };
@@ -181,7 +156,7 @@ class Room {
     /**
      * @param {"hello"|"heart"} type
      */
-    packet(type) {
+    getPacket(type) {
         /* 
          * 0000 00[body length + head length(16)] 00[head lenght(16)] 00[protocol type] 00[operation type] 01
          * 
@@ -202,7 +177,7 @@ class Room {
         switch (type) {
             case 'hello':
                 let data = JSON.stringify({
-                    "uid": this._randUid(),
+                    "uid": this.getRandUid(),
                     "roomid": this.id,
                     "protover": 1,
                     "platform": "web",
@@ -227,15 +202,8 @@ class Room {
                 break;
         }
     }
-    _randUid() {
+    getRandUid() {
         return 1E15 + Math.floor(2E15 * Math.random())
-    }
-    ping() {
-        let date = Date.now();
-        while (true) {
-            if (Date.now - date == 1000) this.socket.send(this.packet('heart'));
-            continue;
-        }
     }
     onMessage(data) {
         fs.writeFile('./log', JSON.stringify(Buffer.from(data)) + '\n', { flag: 'a+' }, err => { });
@@ -248,13 +216,13 @@ class Room {
                 console.log("人气：" + data.readInt32BE(16));
 
                 db.INSERT(this.id, {
-                    count: this.counter,
+                    count: this.live_counter,
                     time: this.room_info.room.start_time,
                     views: data.readInt32BE(16)
                 });
                 break;
             case 2:
-                this.socket.send(this.packet('heart'));
+                this.socket.send(this.getPacket('heart'));
                 break;
             case 5:
                 //let _data = JSON.parse(data.toString('utf-8', 16));
@@ -266,22 +234,54 @@ class Room {
         }
     }
     async connectSocket() {
-        this.danmu = await this._setDanmuURL();
-        this.socket = new ws(`wss://broadcastlv.chat.bilibili.com/sub`);
+        this.socket = new ws(`ws://broadcastlv.chat.bilibili.com:2244/sub`);
         this.socket.on('open', () => {
-            this.socket.send(this.packet('hello'));
-            this.socket.send(this.packet('heart'));
+            this.socket.send(this.getPacket('hello'));
+            this.socket.send(this.getPacket('heart'));
         });
-        this.socketInterval = setInterval(() => { this.socket.send(this.packet('heart')) }, 5000);
+        this.socketInterval = setInterval(() => { this.socket.send(this.getPacket('heart')) }, 5000);
         this.socket.on('ping', () => {
-            this.socket.send(this.packet('heart'));
+            this.socket.send(this.getPacket('heart'));
         });
         this.socket.on('pong', data => {
             fs.writeFile('./log', JSON.stringify(Buffer.from(data)) + '\n', { flag: 'a+' }, err => { });
         });
         this.socket.on('message', data => this.onMessage(data));
     }
-
+    async closeSocket() {
+        clearInterval(this.socketInterval);
+        this.socket.close();
+    }
+    async setTimer() {
+        this.monitorInterval = setInterval(async () => {
+            this.updateInfo();
+            if (this.last_status === 0 && this.live_status === 1) {
+                console.log('开播');
+                await this.updateInfo();
+                this.last_status = 1;
+                this.connectSocket();
+            } else if (this.last_status === 1 && this.live_status === 0) {
+                console.log("下播");
+                this.last_status = 0;
+                this.closeSocket();
+            };
+        }, 1500);
+    }
+    async updateInfo() {
+        this.danmu = await this.getDanmuURL();
+        this.room_info = await this.getRoomInfo();
+        this.last_status = this.live_status || 0;
+        this.live_status = await this.isLiving();
+        let database_count = await db.getCount(this.id) || 1;
+        let last_data = await db.SELECTALL(this.id, ['count >= 0'], 1, database_count - 1);
+        let db_live_count = last_data.result.length == 0 ? 0 : last_data.result[0].count;
+        let last_live_time = last_data.result.length == 0 ? this.room_info.room.start_time : last_data.result[0].time;
+        this.live_counter = this.live_status
+            ? this.room_info.room.start_time == last_live_time
+                ? db_live_count
+                : db_live_count + 1
+            : db_live_count;
+    }
 }
 
 module.exports = {
