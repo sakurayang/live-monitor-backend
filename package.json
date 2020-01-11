@@ -8,6 +8,7 @@
   "author": "Gerard",
   "license": "MIT",
   "dependencies": {
+    "@koa/cors": "^2.2.3",
     "@types/koa-route": "^3.2.4",
     "better-sqlite3": "^5.4.3",
     "koa": "^2.11.0",

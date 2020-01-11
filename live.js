@@ -15,11 +15,11 @@ class Room {
         return this;
     }
     async init() {
-        await this.updateInfo();
-        this.gift_conf = await this.getgiftConf();
         await require('better-sqlite3')(__dirname + '/live.db')
             .prepare(`CREATE TABLE IF NOT EXISTS "${this.id}" ` +
-                `(count int not null,time int not null,views int not null,gift int,silver int,gold int)`).run();
+                `(count int not null,update_time int not null,time int not null,views int not null,gift int,silver int,gold int)`).run();
+        await this.updateInfo();
+        this.gift_conf = await this.getgiftConf();
         this.last_status = 0;
         await this.setTimer();
     }
@@ -218,6 +218,7 @@ class Room {
                 db.INSERT(this.id, {
                     count: this.live_counter,
                     time: this.room_info.room.start_time,
+                    update_time: Date.now() / 1000,
                     views: data.readInt32BE(16)
                 });
                 break;

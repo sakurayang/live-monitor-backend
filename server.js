@@ -6,6 +6,9 @@ const koa = require('koa');
 const _ = require('koa-route');
 const service = require('./service');
 const app = new koa();
+const cors = require('@koa/cors');
+
+app.use(cors());
 
 app.use(_.get('/', ctx => {
     ctx.status = 200;
@@ -40,29 +43,30 @@ async function getRoomData(id, init = false) {
     }
     return {
         code: 0,
-        msg, result
+        msg,
+        result: Array.isArray(result) ? result : [result]
     }
 }
 app.use(_.get('/:id', async (ctx, id) => {
     ctx.status = 200;
-    ctx.header = { "Content-Type": "application/json" };
-    ctx.body = await getRoomData(id, 1);
+    ctx.set = ({ "Content-Type": "application/json" });
+    ctx.body = await getRoomData(id, 0);
 }));
 app.use(_.get('/:id/init', async (ctx, id) => {
     ctx.status = 200;
-    ctx.header = { "Content-Type": "application/json" };
-    ctx.body = await getRoomData(id, 0);
+    ctx.set = ({ "Content-Type": "application/json" });
+    ctx.body = await getRoomData(id, 1);
 }));
 app.use(_.get('/:id/living', async (ctx, id) => {
     ctx.status = 200;
-    ctx.header = { "Content-Type": "text/plain" };
+    ctx.set = ({ "Content-Type": "text/plain" });
     let info = await request.get(`https://api.live.bilibili.com/room/v1/Room/room_init?id=${id}`);
     info = JSON.parse(info);
     ctx.body = info.data.live_status;
 }));
 app.use(_.get('/:id/add/', async (ctx, id) => {
     ctx.status = 200;
-    ctx.header = { "Content-Type": "application/json" };
+    ctx.set = ({ "Content-Type": "application/json" });
     let data = await fs.readFileSync('./list.json', { encoding: 'utf-8' });
     data = JSON.parse(data);
     data.list.push({ id, enable: 1 });
