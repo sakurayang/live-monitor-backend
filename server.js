@@ -69,6 +69,13 @@ app.use(_.get('/:id/add/', async (ctx, id) => {
     ctx.set = ({ "Content-Type": "application/json" });
     let data = await fs.readFileSync('./list.json', { encoding: 'utf-8' });
     data = JSON.parse(data);
+    for (const item of data.list) {
+        if (item.id == id) {
+            ctx.body = "has been added";
+            return;
+        }
+        else continue;
+    }
     data.list.push({ id, enable: 1 });
     fs.writeFile('./list.json', JSON.stringify(data), { encoding: 'utf-8' }, err => console.log(err));
     service.add(id);
