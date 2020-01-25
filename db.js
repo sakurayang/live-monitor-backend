@@ -75,17 +75,11 @@ async function selectAll(table, where, limit = 0, offset = 0) {
 /**
  * 
  * @param {String} table 
- * @param {{
-    time: Date,
-    views: Number,
-    gift: Number,
-    silver: Number,
-    gold: Number
-    }} values
+ * @param {JSON} values
  */
 async function insert(table, values) {
     //console.log(parseObject(values).keys.toString())
-    await DB.prepare(`CREATE TABLE IF NOT EXISTS "${table}" (count int not null,time int not null,views int not null,gift int,silver int,gold int)`).run();
+    //console.log(parseObject(values).values.toString())
     await DB.prepare(`INSERT INTO "${table}" (${parseObject(values).keys.toString()}) VALUES (${parseObject(values).values.toString()})`).run();
 }
 

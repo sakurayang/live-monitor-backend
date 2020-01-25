@@ -58,7 +58,10 @@ function parseBody(operation, protocol, body) {
                 code: 0,
                 type: "view",
                 msg: null,
-                data: body.readInt32BE(0)
+                data: {
+                    time: Date.now(),
+                    view: body.readInt32BE(0)
+                }
             };
             break;
         }
@@ -225,6 +228,7 @@ function parseNotify(body) {
             msg: "",
             type: "guard_buy",
             data: {
+                time: Date.now(),
                 level: Number(data.guard_level),
                 giftname: data.guard_level == 3 ? "舰长" :
                     data.guard_level == 2 ? "提督" :

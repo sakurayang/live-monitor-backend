@@ -9,6 +9,8 @@ rank.js
 star.js
 *.db
 user.js
+temp/
+*list.json
 
 # Logs
 logs

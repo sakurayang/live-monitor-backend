@@ -2,7 +2,7 @@ const request = require("request-promise-native");
 const ws = require('ws');
 const fs = require('fs');
 const db = require('./db');
-
+const parser = require("./parser")
 class Room {
     /**
      * @param {Number} id
@@ -17,10 +17,15 @@ class Room {
     async init() {
         await require('better-sqlite3')(__dirname + '/live.db')
             .prepare(`CREATE TABLE IF NOT EXISTS "${this.id}" ` +
-                `(count int not null,update_time int not null,time int not null,views int not null,gift int,silver int,gold int)`).run();
+                `(count int not null,update_time int not null,time int not null,views int not null)`).run();
+        await require('better-sqlite3')(__dirname + '/live.db')
+            .prepare(`CREATE TABLE IF NOT EXISTS "${this.id}_gift" ` +
+                "(count int not null,update_time int not null,time int not null," +
+                "gift_name text not null,gift_id int not null,gift_count int not null,silver int,gold int)").run();
         await this.updateInfo();
         this.gift_conf = await this.getgiftConf();
         this.last_status = 0;
+        this.danmu_conf = await this.getDanmuURL();
         await this.setTimer();
     }
     async isLiving() {
@@ -207,35 +212,55 @@ class Room {
     }
     onMessage(data) {
         fs.writeFile('./log', JSON.stringify(Buffer.from(data)) + '\n', { flag: 'a+' }, err => { });
-        let operation = data.readInt8(11);
-        switch (operation) {
-            case 8:
-                console.log('加入房间');
-                break;
-            case 3:
-                console.log("人气：" + data.readInt32BE(16));
+        let parsed = parser.packet(data);
+        fs.writeFile('./log', JSON.stringify(parsed) + '\n', { flag: 'a+' }, err => { });
 
-                db.INSERT(this.id, {
-                    count: this.live_counter,
-                    time: this.room_info.room.start_time,
-                    update_time: Date.now() / 1000,
-                    views: data.readInt32BE(16)
-                });
-                break;
-            case 2:
-                this.socket.send(this.getPacket('heart'));
-                break;
-            case 5:
-                //let _data = JSON.parse(data.toString('utf-8', 16));
-                //console.log(_data);
-                break;
-            default:
-                console.log(data);
-                break;
+        if (parsed.code != 0) console.log(parsed);
+
+        if (parsed.type == "view") {
+            db.INSERT(this.id, {
+                count: this.live_counter,
+                time: this.room_info.room.start_time,
+                update_time: parsed.data.time,
+                views: parsed.data.view
+            });
+        } else if (parsed.type == "gift") {
+            db.INSERT(this.id + "_gift", {
+                count: this.live_counter,
+                time: this.room_info.room.start_time,
+                update_time: parsed.data.timestamp,
+                gift_name: `"${parsed.data.name}"`,
+                gift_id: parsed.data.giftId,
+                gift_count: parsed.data.num,
+                silver: parsed.data.coin_type == "silver" ? parsed.data.total_coin : 0,
+                gold: parsed.data.coin_type == "gold" ? parsed.data.total_coin : 0
+            });
+        } else if (parsed.type == "guard_buy") {
+            db.INSERT(this.id + "_gift", {
+                count: this.live_counter,
+                time: this.room_info.room.start_time,
+                update_time: parsed.data.time,
+                gift_name: `"${parsed.data.giftname}"`,
+                gift_id: 0,
+                gift_count: parsed.data.num,
+                silver: 0,
+                gold: parsed.data.total_coin
+            });
+        } else if (parsed.type == "super_chat") {
+            db.INSERT(this.id + "_gift", {
+                count: this.live_counter,
+                time: this.room_info.room.start_time,
+                update_time: parsed.data.time,
+                gift_name: `"${parsed.data.gift.name}"`,
+                gift_id: parsed.data.gift.id,
+                gift_count: parsed.data.gift.num,
+                silver: 0,
+                gold: parsed.data.price * parsed.data.rate
+            });
         }
     }
     async connectSocket() {
-        this.socket = new ws(`ws://broadcastlv.chat.bilibili.com:2244/sub`);
+        this.socket = new ws(`wss://${this.danmu_conf.host}/sub`);
         this.socket.on('open', () => {
             this.socket.send(this.getPacket('hello'));
             this.socket.send(this.getPacket('heart'));
@@ -284,7 +309,6 @@ class Room {
             : db_live_count;
     }
 }
-
 module.exports = {
     Room
 }

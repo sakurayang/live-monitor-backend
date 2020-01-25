@@ -18,7 +18,34 @@ app.use(_.get('/', ctx => {
         msg: 'please input id'
     }
 }));
+/**
+ * @param {Number|String} id
+ * @param {Boolean} init
+ * @returns {{
+        code: 0|1,
+        msg: "ok"|"init"|Error,
+        result: {
+            view:[{
+                count: Number,
+                update_time: Number,
+                time: Number,
+                views: Number
+            }],
+            gift:[{
+                count: Number,
+                update_time: Number,
+                time: Number,
+                gift_name: String,
+                gift_id: Number,
+                gift_count: Number,
+                silver: Number,
+                gold: Number
+            }]
+        }
+    }}
+ */
 async function getRoomData(id, init = false) {
+    id = String(id);
     let offset;
     try {
         offset = await db.getCount(id) - 1;
@@ -28,23 +55,18 @@ async function getRoomData(id, init = false) {
             msg: String(error)
         };
     }
-    let counter = (await db.SELECTALL(id, [`count >= 0`], 1, offset - 1)).result[0].count;
+    let live_time_count = (await db.SELECTALL(id, [`count >= 0`], 1, offset - 1)).result[0].count;
     //console.log(count, counter);
-    let msg = "ok";
-    let result;
-    if (init) {
-        let init_data = await db.SELECTALL(id, { count: counter });
-        console.log(init_data);
-        msg = "init";
-        result = init_data.result
-    } else {
-        let data = (await db.SELECTALL(id, { count: counter })).result;
-        result = data[data.length - 1];
-    }
+    let view_data = await db.SELECTALL(id, { count: live_time_count });
+    //console.log(view_data);
+    let gift_data = await db.SELECTALL(id + "_gift", { count: live_time_count });
     return {
         code: 0,
-        msg,
-        result: Array.isArray(result) ? result : [result]
+        msg: init ? "init" : "ok",
+        result: {
+            view: init ? view_data.result : [view_data.result[view_data.count - 1]],
+            gift: init ? gift_data.result : [gift_data.result[gift_data.count - 1]]
+        }
     }
 }
 app.use(_.get('/:id', async (ctx, id) => {
@@ -76,7 +98,7 @@ app.use(_.get('/:id/add/', async (ctx, id) => {
         }
         else continue;
     }
-    data.list.push({ id, enable: 1 });
+    data.list.push({ id: Number(id), enable: 1 });
     fs.writeFile('./list.json', JSON.stringify(data), { encoding: 'utf-8' }, err => console.log(err));
     service.add(id);
 }))
