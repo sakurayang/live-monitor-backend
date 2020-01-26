@@ -32,6 +32,7 @@ app.use(_.get('/', ctx => {
                 views: Number
             }],
             gift:[{
+                id:Number,
                 count: Number,
                 update_time: Number,
                 time: Number,

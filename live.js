@@ -20,7 +20,7 @@ class Room {
                 `(count int not null,update_time int not null,time int not null,views int not null)`).run();
         await require('better-sqlite3')(__dirname + '/live.db')
             .prepare(`CREATE TABLE IF NOT EXISTS "${this.id}_gift" ` +
-                "(count int not null,update_time int not null,time int not null," +
+                "(id int primary key not null,count int not null,update_time int not null,time int not null," +
                 "gift_name text not null,gift_id int not null,gift_count int not null,silver int,gold int)").run();
         await this.updateInfo();
         this.gift_conf = await this.getgiftConf();
