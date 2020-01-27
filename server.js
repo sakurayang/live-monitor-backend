@@ -46,7 +46,6 @@ app.use(_.get('/', ctx => {
     }}
  */
 async function getRoomData(id, init = false) {
-    id = String(id);
     let offset;
     try {
         offset = await db.getCount(id) - 1;
