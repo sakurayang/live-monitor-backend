@@ -80,6 +80,7 @@ async function selectAll(table, where, limit = 0, offset = 0) {
 async function insert(table, values) {
     //console.log(parseObject(values).keys.toString())
     //console.log(parseObject(values).values.toString())
+    console.log(values);
     await DB.prepare(`INSERT INTO "${table}" (${parseObject(values).keys.toString()}) VALUES (${parseObject(values).values.toString()})`).run();
 }
 

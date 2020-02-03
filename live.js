@@ -17,11 +17,11 @@ class Room {
     async init() {
         await require('better-sqlite3')(__dirname + '/live.db')
             .prepare(`CREATE TABLE IF NOT EXISTS "${this.id}" ` +
-                `(count int not null,update_time int not null,time int not null,views int not null)`).run();
+                `(count integer not null,update_time integer not null,time integer not null,views integer not null)`).run();
         await require('better-sqlite3')(__dirname + '/live.db')
             .prepare(`CREATE TABLE IF NOT EXISTS "${this.id}_gift" ` +
-                "(id int primary key not null,count int not null,update_time int not null,time int not null," +
-                "gift_name text not null,gift_id int not null,gift_count int not null,silver int,gold int)").run();
+                "(id integer primary key AUTOINCREMENT not null,count integer not null,update_time integer not null,time integer not null," +
+                "gift_name text not null,gift_id integer not null,gift_count integer not null,silver integer,gold integer)").run();
         await this.updateInfo();
         this.gift_conf = await this.getgiftConf();
         this.last_status = 0;
@@ -144,16 +144,6 @@ class Room {
         return {
             port: info.data.port,
             host: info.data.host,
-            fastest: {
-                port: info.data.host_server_list[0].port,
-                host: info.data.host_server_list[0].host,
-                ws_port: info.data.host_server_list[0].ws_port
-            },
-            second: {
-                port: info.data.host_server_list[1].port,
-                host: info.data.host_server_list[1].host,
-                ws_port: info.data.host_server_list[1].ws_port
-            },
             token: info.data.token
         }
     }
@@ -213,7 +203,7 @@ class Room {
     onMessage(data) {
         fs.writeFile('./log', JSON.stringify(Buffer.from(data)) + '\n', { flag: 'a+' }, err => { });
         let parsed = parser.packet(data);
-        fs.writeFile('./log', JSON.stringify(parsed) + '\n', { flag: 'a+' }, err => { });
+        fs.writeFile('./pasred_log', JSON.stringify(parsed) + '\n', { flag: 'a+' }, err => { });
 
         if (parsed.code != 0) console.log(parsed);
 
@@ -252,7 +242,7 @@ class Room {
                 time: this.room_info.room.start_time,
                 update_time: parsed.data.time,
                 gift_name: `"${parsed.data.gift.name}"`,
-                gift_id: parsed.data.gift.id,
+                gift_id: isNaN(parsed.data.gift.id) ? 114514820 : parsed.data.gift.id,
                 gift_count: parsed.data.gift.num,
                 silver: 0,
                 gold: parsed.data.price * parsed.data.rate
